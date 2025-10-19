@@ -13,13 +13,13 @@ def get_olx_results(search_query: str):
     results = []
     
     with sync_playwright() as p:
-        # Launch browser with a longer timeout
+        # Launch browser with a timeout
         browser = p.chromium.launch(headless=False)
         context = browser.new_context()
         page = context.new_page()
         
         try:
-            # Set a longer navigation timeout (60 seconds)
+            # Set navigation timeout (60 seconds)
             page.set_default_navigation_timeout(60000)
             
             # Navigate to the page
