@@ -1,84 +1,70 @@
 import time
-from playwright.sync_api import sync_playwright, Playwright, expect
+from playwright.sync_api import sync_playwright
 from tabulate import tabulate
 import urllib.parse
 
-# --- Configuration ---
+# Configuration
 BASE_URL = "https://www.olx.in/items/q-"
 SEARCH_TERM = "car cover"
 
-
-# --- Constants for Selectors ---
-# selector -> an address for the html element
-LIST_SELECTOR = "ul[data-aut-id='itemsList']"
-ITEM_SELECTOR = "li[data-aut-id='itemBox']"
-TITLE_SELECTOR = "span[data-aut-id='itemTitle']"
-PRICE_SELECTOR = "span[data-aut-id='itemPrice']"
-DESC_SELECTOR = "span[data-aut-id='itemDescription']"
-
-
 def get_olx_results(search_query: str):
-    # 1. Build the URL
     query_safe = urllib.parse.quote_plus(search_query)
-    search_url = f"{BASE_URL}{query_safe}?isSearchCall=true"
-    
+    search_url = f"{BASE_URL}{query_safe}"
     results = []
     
-    # 2. Start Playwright
     with sync_playwright() as p:
+        # Launch browser with a longer timeout
+        browser = p.chromium.launch(headless=False)
+        context = browser.new_context()
+        page = context.new_page()
+        
         try:
-            # 3. Launch the browser
-            browser = p.chromium.launch(headless=False) 
-            page = browser.new_page()
+            # Set a longer navigation timeout (60 seconds)
+            page.set_default_navigation_timeout(60000)
             
-            # 4. Go to the page
-            page.goto(search_url, wait_until="load", timeout=60000)
-
-            # 5. WAIT for the content to load
-            print("Waiting for search results to load...")
-            # list_container = page.wait_for_selector(LIST_SELECTOR, timeout=10000)
-            list_container = page.wait_for_selector(LIST_SELECTOR)
-
-            # 6. Find all items
-            items = list_container.query_selector_all(ITEM_SELECTOR)
-            print(f"Found {len(items)} items.")
-
-            # 7. Loop and extract data
+            # Navigate to the page
+            print(f"Loading: {search_url}")
+            page.goto(search_url, wait_until="domcontentloaded")
+            
+            # Wait for the items to load
+            print("Waiting for items to load...")
+            page.wait_for_selector('div[data-aut-id="itemBox"]', timeout=10000)
+            
+            # Get all items
+            items = page.query_selector_all('div[data-aut-id="itemBox"]')
+            print(f"Found {len(items)} items")
+            
+            # Extract data from each item
             for item in items:
-                title = item.query_selector(TITLE_SELECTOR)
-                price = item.query_selector(PRICE_SELECTOR)
-                desc = item.query_selector(DESC_SELECTOR) 
-
-                # 8. Clean the data
-                title_text = title.text_content().strip() if title else "N/A"
-                price_text = price.text_content().strip() if price else "N/A"
-                desc_text = desc.text_content().strip() if desc else "N/A (See item page)"
-
-                results.append([title_text, price_text, desc_text])
+                title_elem = item.query_selector('div[data-aut-id="itemTitle"]')
+                price_elem = item.query_selector('span[data-autoid="price"]')
+                desc_elem = item.query_selector('span[data-autoid="description"]')
+                
+                title = title_elem.text_content().strip() if title_elem else "N/A"
+                price = price_elem.text_content().strip() if price_elem else "N/A"
+                desc = desc_elem.text_content().strip() if desc_elem else "N/A"
+                
+                results.append([title, price, desc])
                 
         except Exception as e:
-            print(f"An error occurred: {e}")
-        
+            print(f"Error occurred: {str(e)}")
+            
         finally:
-            # 9. Clean up
-            if 'browser' in locals():
-                browser.close()
-                
+            # Clean up
+            context.close()
+            browser.close()
+    
     return results
 
-
 def main():
-    
-   # Main function to run the scraping process and print the results.
-    
     search_results = get_olx_results(SEARCH_TERM)
     
     if search_results:
-        print("\n--- OLX Search Results ---")
+        print("\n--- OLX Car Covers ---")
         headers = ["Title", "Price", "Description"]
         print(tabulate(search_results, headers=headers, tablefmt="grid"))
     else:
-        print("No results were returned.")
+        print("No results found or there was an error fetching data.")
 
 if __name__ == "__main__":
     main()
